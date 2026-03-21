@@ -50,6 +50,4 @@ source venv/bin/activate    # Windows: venv\Scripts\activate
 
 # Install dependencies (adjust versions as needed)
 pip install -r requirements.txt
-
-## Demo
-<image-card alt="Sonar preprocessing demo" src="images/demo_sonar_pre_pro.gif" ></image-card>
+![demo_sonar_pre_pro](https://github.com/user-attachments/assets/a234baef-ed1c-43de-83c9-6cbcfe9e3e83)
