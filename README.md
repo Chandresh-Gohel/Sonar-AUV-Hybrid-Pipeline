@@ -28,7 +28,7 @@ The dataset contains sonar video frames (ARIS sonar) with fish annotations (boun
 | `evaluate_yolo_pre_pro.py`    | Evaluates the same YOLO model on **preprocessed** images – shows improvement |
 | `sonar_dataset_pre_pro.yaml`  | YOLO dataset configuration file for the **preprocessed** dataset            |
 
-Typical workflow:
+Workflow:
 1. Download & extract `tiny_dataset.tar.gz`
 2. Run filtering → cleaning (`create_csv.py`)
 3. Convert annotations to YOLO format (`convert_csv_to_YOLO.py`)
