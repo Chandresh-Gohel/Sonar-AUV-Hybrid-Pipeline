@@ -1,0 +1,7 @@
+numpy==2.4.3
+opencv_python==4.13.0.90
+pandas==3.0.1
+Pillow==12.1.1
+torch==2.5.1
+tqdm==4.65.2
+ultralytics==8.4.21

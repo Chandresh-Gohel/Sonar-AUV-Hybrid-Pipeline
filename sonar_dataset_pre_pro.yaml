@@ -1,0 +1,11 @@
+# Path to the new dataset directory (ABSOLUTE PATH)
+path: D:\SONAR_PROJECT\_SONAR_RUN_3\sonar_yolo_dataset_pre_pro
+
+# Train/val images
+train: images/train
+val: images/val
+# test: images/val
+
+# --- Class names ---
+names:
+  0: fish
