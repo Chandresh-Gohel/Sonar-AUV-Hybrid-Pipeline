@@ -52,4 +52,4 @@ source venv/bin/activate    # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 ## Demo
-<image-card alt="Sonar preprocessing demo" src="images/demo_sonar_pre_pro.gif" ></image-card>
+<image-card alt="Sonar preprocessing demo" src="./images/demo_sonar_pre_pro.gif" ></image-card>
