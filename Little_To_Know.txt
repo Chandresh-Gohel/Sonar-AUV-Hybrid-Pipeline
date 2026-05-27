@@ -1,0 +1,296 @@
+================================================================
+  Sonar-Based Fish Detection and Counting
+ ================================================================
+
+Two-phase pipeline for automated fish detection and counting
+from ARIS multi-beam imaging sonar on the Caltech Fish Counting
+(CFC) benchmark.
+
+================================================================
+CONTENTS
+================================================================
+  1. Project Overview
+  2. Installation & Setup
+  3. Repository Layout
+  4. Phase I — Quick Start (SAME_SITE_WORK)
+  5. Phase II — Quick Start (DOAD_WORK)
+  6. Script Reference
+  7. Key Results
+  8. Configuration Reference
+  9. Hardware
+
+================================================================
+1. PROJECT OVERVIEW
+================================================================
+
+Phase I — Preprocessing Study
+  Compares raw sonar input vs a hybrid MOG2+TVG 3-channel tensor
+  across 8 YOLO variants (YOLOv5/v8/v11/v26, nano & small) on
+  the CFC Tiny dataset split. Published at IEEE I3CTCON 2026.
+
+Phase II — Domain-Adaptive Object Detection (DAOD)
+  Self-training pipeline transferring a source-trained detector
+  to the unlabelled Kenai Channel target site.
+  Steps: pseudo-label generation → Kalman-centroid temporal
+  filtering → 50/50 mixed fine-tuning. Zero target annotations.
+
+Key finding:
+  Compact detectors (nano) benefit from MOG2+TVG preprocessing.
+  High-capacity detectors (small) are degraded by it — use raw.
+  This rule holds through both Phase I and Phase II.
+
+================================================================
+2. INSTALLATION & SETUP
+================================================================
+
+--- Install dependencies ---
+  pip install -r requirements.txt
+
+--- Set your data path (DOAD_WORK scripts) ---
+  All DOAD scripts read one environment variable:
+
+  Linux / macOS:
+    export SONAR_BASE_DIR=/path/to/_SONAR_RUN_3
+
+  Windows (cmd):
+    set SONAR_BASE_DIR=D:\_SONAR_RUN_3
+
+  Windows (PowerShell):
+    $env:SONAR_BASE_DIR = "D:\_SONAR_RUN_3"
+
+  Alternatively, open DOAD_WORK/config.py and edit BASE_DIR
+  directly. Every DOAD script imports from config.py — one
+  edit propagates everywhere.
+
+--- SAME_SITE_WORK paths (Phase I preprocessing) ---
+  export SONAR_INPUT_DIR=/path/to/raw
+  export SONAR_OUTPUT_DIR=/path/to/data_preprocessed/raw
+  export SONAR_IMAGE_BASE_DIR=/path/to/data_preprocessed/raw
+
+  (Defaults: ./data/raw and ./data_preprocessed/raw)
+
+--- Inference video path ---
+  export SONAR_VIDEO_PATH=/path/to/your_video.mp4
+
+================================================================
+3. REPOSITORY LAYOUT
+================================================================
+
+WORK_UPLOAD_CG_24-26-36/
+|
++-- SAME_SITE_WORK/               Phase I code
+|   +-- create_csv.py             MOT .txt -> CSV (single 'fish' class)
+|   +-- pre_pro_data.py           MOG2+TVG preprocessing on raw sequences
+|   +-- convert_csv_to_YOLO.py    CSV + images -> YOLO dataset (512x512)
+|   +-- train_yolo_raw.py         Train 8 YOLO variants on raw images
+|   +-- train_yolo_pre_pro.py     Train 8 YOLO variants on preprocessed
+|   +-- evaluate_yolo_raw.py      Benchmark raw models (mAP + MAE + FPS)
+|   +-- evaluate_yolo_pre_pro.py  Benchmark preprocessed models
+|   +-- sonar_dataset.yaml        YOLO config -- raw pipeline
+|   +-- sonar_dataset_pre_pro.yaml YOLO config -- preprocessed pipeline
+|   +-- requirements.txt          Phase I specific dependencies
+|
++-- DOAD_WORK/                    Phase II code
+|   +-- config.py                 *** Single source of truth — edit here ***
+|   +-- preprocessing.py          MOG2TVGPreprocessor + BaselinePlusPlus
+|   +-- kalman_centroid.py        KalmanCentroidTracker + PseudoLabelFilter
+|   +-- utils.py                  Logging, YAML, CSV, label I/O helpers
+|   +-- loi_counter.py            LOI fish counter (upstream/downstream)
+|   +-- convert_cfc_labels.py     CFC COCO JSON -> YOLO .txt
+|   +-- preprocess_cfc.py         Ch3 extraction + MOG2+TVG or raw
+|   +-- build_yolo_dataset.py     Sequence-diverse sampling -> YOLO struct
+|   +-- filter_dataset.py         Remove channel images from source split
+|   +-- retrain_source.py         Retrain source-only detector
+|   +-- train_cfc.py              Train burn-in detectors
+|   +-- pseudo_label.py           Generate pseudo-labels on Channel train
+|   +-- temporal_filter.py        Kalman-centroid filter on pseudo-labels
+|   +-- dataset_mixer.py          50/50 source + pseudo-label mix
+|   +-- finetune.py               DAOD fine-tuning
+|   +-- evaluate_daod.py          Quick MAE + counting evaluation
+|   +-- evaluate_daod_full.py     Full metrics: mAP + MAE + FPS
+|   +-- evaluate_pseudo_labels.py Raw vs filtered pseudo-label quality
+|   +-- inference_benchmark.py    CPU latency benchmark (100 runs)
+|   +-- inference.py              2x2 grid + tracking video output
+|   +-- check_dims.py             Diagnostic: COCO JSON vs image dims
+|
++-- requirements.txt              Root requirements (all dependencies)
++-- README.html                   Full HTML documentation
++-- README.txt                    This file
+
+================================================================
+4. PHASE I — QUICK START  (SAME_SITE_WORK/)
+================================================================
+
+Step 1 — Prepare MOT annotations -> CSV
+  python create_csv.py \
+    --annotations_dir annotations-tiny \
+    --images_dir raw \
+    --output_train_csv train_annotations.csv \
+    --output_test_csv test_annotations.csv
+
+Step 2 — Preprocess raw sonar sequences
+  # Set env var first (or edit pre_pro_data.py directly)
+  export SONAR_INPUT_DIR=/path/to/raw
+  export SONAR_OUTPUT_DIR=/path/to/preprocessed/raw
+  python pre_pro_data.py
+
+Step 3 — Build YOLO dataset
+  export SONAR_IMAGE_BASE_DIR=/path/to/preprocessed/raw
+  python convert_csv_to_YOLO.py
+
+Step 4 — Update YAML paths
+  Edit sonar_dataset.yaml and sonar_dataset_pre_pro.yaml:
+    path: /absolute/path/to/your/sonar_yolo_dataset
+
+Step 5 — Train
+  python train_yolo_raw.py        # raw pipeline (8 models)
+  python train_yolo_pre_pro.py    # preprocessed pipeline (8 models)
+
+Step 6 — Evaluate
+  python evaluate_yolo_raw.py
+  python evaluate_yolo_pre_pro.py
+
+================================================================
+5. PHASE II — QUICK START  (DOAD_WORK/)
+================================================================
+
+  export SONAR_BASE_DIR=/path/to/_SONAR_RUN_3
+  cd DOAD_WORK
+
+--- Prepare source data ---
+  python convert_cfc_labels.py --split train
+  python convert_cfc_labels.py --split val
+
+  python preprocess_cfc.py --mode mog2tvg --split train
+  python preprocess_cfc.py --mode mog2tvg --split val
+  python preprocess_cfc.py --mode raw     --split train
+  python preprocess_cfc.py --mode raw     --split val
+
+  python build_yolo_dataset.py --mode mog2tvg
+  python build_yolo_dataset.py --mode raw
+
+--- Train source burn-in models ---
+  python train_cfc.py --mode yolov5n_mog
+  python train_cfc.py --mode yolov8s_raw
+  python train_cfc.py --mode yolov26s_mog
+  python train_cfc.py --mode yolov26s_raw
+
+--- DAOD pipeline (repeat for each mode) ---
+  python pseudo_label.py   --mode yolov5n_mog
+  python temporal_filter.py --mode yolov5n_mog
+  python dataset_mixer.py  --mode yolov5n_mog
+  python finetune.py       --mode yolov5n_mog
+
+--- Evaluate ---
+  python evaluate_daod_full.py --mode all
+
+--- Inference ---
+  export SONAR_VIDEO_PATH=/path/to/video.mp4
+  python inference.py --model yolov26s_raw --mode daod
+
+================================================================
+6. SCRIPT REFERENCE
+================================================================
+
+DOAD_WORK core pipeline scripts:
+  Script                   --mode choices
+  ----------------------   ------------------------------------
+  convert_cfc_labels.py    train | val
+  preprocess_cfc.py        mog2tvg | raw  (+--split train|val)
+  build_yolo_dataset.py    mog2tvg | raw
+  train_cfc.py             yolov5n_mog | yolov8s_raw |
+                             yolov26s_mog | yolov26s_raw
+  pseudo_label.py          (same 4 choices)
+  temporal_filter.py       (same 4 choices)
+  dataset_mixer.py         (same 4 choices)
+  finetune.py              (same 4 choices)
+
+Evaluation scripts:
+  evaluate_daod.py          Quick MAE + counting (no mAP)
+  evaluate_daod_full.py     Full metrics: mAP + MAE + FPS
+                              supports --mode all
+  evaluate_pseudo_labels.py Raw vs filtered pseudo-label quality
+  inference_benchmark.py    CPU latency benchmark, 100 runs
+
+Support modules (not run directly):
+  preprocessing.py          MOG2TVGPreprocessor class
+  kalman_centroid.py        KalmanCentroidTracker class
+  loi_counter.py            LOICounter class
+  utils.py                  Shared utilities
+
+================================================================
+7. KEY RESULTS
+================================================================
+
+Phase I — CFC Tiny val (3,794 frames):
+  Detector     Pipeline      MAE     mAP@0.5
+  ---------    ----------    -----   -------
+  YOLOv5n      MOG2+TVG      0.729   0.772
+  YOLOv8s      Raw           0.688   0.798
+  YOLOv26s     Raw           0.575   0.836   <- Best overall
+  YOLOv26s     MOG2+TVG      0.613   0.850
+
+Phase II — Channel test (13,090 frames, 41,761 GT fish):
+  Config              Mode         MAE     mAP@0.5   FPS
+  ----------------    ---------    -----   -------   ----
+  YOLOv5n+MOG/TVG     source       2.3465  0.4168    45.4
+  YOLOv5n+MOG/TVG     DAOD ↑       2.1620  0.4424    48.9
+  YOLOv8s+raw         source       2.2963  0.3491    48.8
+  YOLOv8s+raw         DAOD ↑       2.0348  0.3796    48.0
+  YOLOv26s+raw        source       2.0411  0.4012    72.6  <- Best
+  YOLOv26s+MOG/TVG    DAOD ↑       2.4706  0.4535    76.2
+
+Jetson Orin edge deployment:
+  YOLOv26s+raw DAOD:  53.37 FPS
+  YOLOv26s+MOG DAOD:  23.50 FPS
+
+CPU benchmark (Intel i7-9700, 100 runs):
+  YOLOv5n+MOG/TVG:    30.95 FPS
+  YOLOv8s+raw:        25.68 FPS
+  YOLOv26s+raw:       26.88 FPS
+
+================================================================
+8. CONFIGURATION REFERENCE  (DOAD_WORK/config.py)
+================================================================
+
+  Parameter                        Value    Script
+  -------------------------------  -------  ---------------------
+  Image size                       512x512  All scripts
+  Conf gate — pseudo-label gen     0.3      pseudo_label.py
+  Conf gate — evaluation           0.4      evaluate_daod*.py
+  Kalman min-hits                  2-3      temporal_filter.py
+  Kalman max distance              50 px    temporal_filter.py
+  Kalman max age (coasting)        45 fr    temporal_filter.py
+  Source mix ratio                 0.50     dataset_mixer.py
+  Fine-tune epochs                 30       finetune.py
+  Fine-tune LR                     0.001    finetune.py
+  Backbone freeze layers           10       finetune.py
+  MOG2 history                     200 fr   preprocessing.py
+  Dataset — mog2tvg train/val      15k/3k   build_yolo_dataset.py
+  Dataset — raw     train/val      30k/6k   build_yolo_dataset.py
+
+Weight paths (relative to SONAR_BASE_DIR):
+  Config         Source weights                              DAOD weights
+  -----------    ------------------------------------------  ----------------------------------------
+  yolov5n_mog    runs/detect/yolov5n_cfc_mog2tvg/weights/   daod/weights/yolov5n_cfc_mog2tvg_daod/
+  yolov8s_raw    runs/detect/yolov8s_cfc_raw/weights/        daod/weights/yolov8s_cfc_raw_daod/
+  yolov26s_mog   runs/detect/yolov26s_cfc_mog2tvg/weights/  daod/weights/yolov26s_cfc_mog2tvg_daod/
+  yolov26s_raw   runs/detect/yolov26s_cfc_raw/weights/       daod/weights/yolov26s_cfc_raw_daod/
+
+================================================================
+9. HARDWARE
+================================================================
+
+Training:
+  Phase I:            NVIDIA GTX 1650 (4 GB)
+  Phase II fine-tune: NVIDIA RTX 6000 Ada (48 GB)
+  Phase II eval:      NVIDIA RTX 6000 Ada (48 GB)
+
+Deployment / benchmarking:
+  CPU benchmark:      Intel i7-9700 (8 core, 3.0-4.7 GHz)
+  Edge GPU:           NVIDIA Jetson Orin
+
+================================================================
+Dataset: Caltech Fish Counting (CFC) — Kay et al., ECCV 2022
+         https://github.com/visipedia/caltech-fish-counting
+================================================================

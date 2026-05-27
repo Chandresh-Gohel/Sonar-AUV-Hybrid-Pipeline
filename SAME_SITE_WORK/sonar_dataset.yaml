@@ -1,0 +1,10 @@
+# Path to the YOLO dataset directory (update this to your local path or use absolute path)
+path: ./sonar_yolo_dataset
+
+# Train/val images
+train: images/train
+val: images/val
+
+# --- Class names ---
+names:
+  0: fish
